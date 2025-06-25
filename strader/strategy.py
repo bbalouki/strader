@@ -7,6 +7,7 @@ from bbstrader.btengine.strategy import MT5Strategy
 from bbstrader.metatrader.account import Account
 from bbstrader.metatrader.trade import TradeAction, TradeSignal, TradingMode
 from bbstrader.models.nlp import FINANCIAL_LEXICON, SentimentAnalyzer  # noqa: F401
+from tkinter import messagebox
 
 
 class SentimentTrading(MT5Strategy):
@@ -59,8 +60,8 @@ class SentimentTrading(MT5Strategy):
 
         self.ID = kwargs.get("ID", SentimentTrading.ID)
         self.threshold = kwargs.get("threshold", 0.2)
-        self.max_positions = kwargs.get("max_positions", 10)
         self.tickers = kwargs.get("symbols")
+        self.max_positions = kwargs.get("max_positions", len(self.tickers))
         self.analyser = SentimentAnalyzer()
         self._sentiments = {}
 
@@ -124,7 +125,9 @@ class SentimentTrading(MT5Strategy):
                 tickers, lexicon=FINANCIAL_LEXICON, **self.kwargs
             )
         except Exception as e:
-            self.logger.error(f"Error fetching sentiments: {e}")
+            err_msg = f"Error fetching sentiments: {e}"
+            self.logger.error(err_msg)
+            messagebox.showerror("Error", err_msg)
             return {}
 
         self._sentiments = sentiments
