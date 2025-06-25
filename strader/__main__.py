@@ -1,17 +1,35 @@
 import sys
 import tkinter as tk
+import traceback
+from pathlib import Path
 from tkinter import messagebox
-from strader.gui import SentimentTradingSystem
+
+from strader.gui import SentimentTradingApp
+
+
+def resource_path(relative_path):
+    """Get absolute path to resource"""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except AttributeError:
+        base_path = Path(__file__).resolve().parent
+
+    return base_path / relative_path
+
+
+ICON_PATH = resource_path("assets/bbstrader.ico")
 
 
 def main():
     try:
         root = tk.Tk()
-        app = SentimentTradingSystem(root)  # noqa: F841
+        root.iconbitmap(ICON_PATH)
+        app = SentimentTradingApp(root)  # noqa: F841
         root.mainloop()
         sys.exit(0)
     except Exception as e:
-        messagebox.showerror("Fatal Error", str(e))
+        error_details = f"{e}\n\n{traceback.format_exc()}"
+        messagebox.showerror("Fatal Error", error_details)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(0)
@@ -19,3 +37,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
