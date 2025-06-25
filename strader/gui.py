@@ -1,6 +1,6 @@
 import threading
 import tkinter as tk
-from tkinter import StringVar, filedialog, scrolledtext, ttk
+from tkinter import StringVar, filedialog, messagebox, scrolledtext, ttk
 
 import matplotlib.pyplot as plt
 from bbstrader.metatrader.utils import TIMEFRAMES
@@ -12,7 +12,7 @@ from strader import inputs
 from strader.strategy import SentimentTrading
 
 
-class SentimentTradingSystem(object):
+class SentimentTradingApp(object):
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -124,16 +124,26 @@ class SentimentTradingSystem(object):
 
     def load_config_from_file(self, name):
         """Load configuration from a file and populate input fields."""
-        config_file = filedialog.askopenfilename(
-            title="Select Configuration File",
+        config_file_path = filedialog.askopenfilename(
+            title=f"Select {name} File",
             filetypes=[("INI Files", "*.ini"), ("All Files", "*.*")],
         )
-        if config_file:
+        # If the user cancels the dialog, config_file_path will be empty
+        if not config_file_path:
+            self.log("Configuration loading cancelled by user.")
+            return None
+        if config_file_path:
             try:
-                self.log(f"Loaded {name} from {config_file}")
+                config = inputs.load_config(config_file_path)
+                self.log(f"Successfully loaded {name} from {config_file_path}")
+                return config
             except Exception as e:
-                self.log(f"Error loading configuration: {e}")
-        return inputs.load_config(config_file)
+                messagebox.showerror(
+                    "Loading Error",
+                    f"Failed to load or parse the configuration file.\n\nError: {e}, "
+                    f"Please make sure you enter {name} manually or load them from a file",
+                )
+                return None
 
     def build_terminal_inputs(self):
         """Builds the input fields for MT5 terminal connection details."""
@@ -190,36 +200,68 @@ class SentimentTradingSystem(object):
     def populate_mt5_inputs_from_config(self):
         """Populate GUI fields from config file."""
         config = self.load_config_from_file("MT5 Credentials")
+        if not config:
+            return
+        # Check if the file contains the required [MT5] section
         if "MT5" in config:
+            # 1. Clear the current content of the entry fields
+            self.mt5_login.delete(0, tk.END)
+            self.mt5_password.delete(0, tk.END)
+            self.mt5_server.delete(0, tk.END)
+
+            # 2. Insert the new values from the config file
             self.mt5_login.insert(0, config["MT5"].get("login", ""))
             self.mt5_password.insert(0, config["MT5"].get("password", ""))
             self.mt5_server.insert(0, config["MT5"].get("server", ""))
+        else:
+            message = "The selected file does not contain an [MT5] section."
+            self.log(message)
+            messagebox.showwarning("Invalid File", message)
 
     def populate_api_inputs_from_config(self):
         """Populate GUI fields from config file."""
         config = self.load_config_from_file("API Credentials")
+        if not config:
+            return
         if "API" in config:
+            # 1. Clear the current content of the entry fields
+            self.reddit_client_id.delete(0, tk.END)
+            self.reddit_client_secret.delete(0, tk.END)
+            self.reddit_user_agent.delete(0, tk.END)
+            self.fmp_api.delete(0, tk.END)
+
+            # 2. Insert the new values from the config file
             self.reddit_client_id.insert(0, config["API"].get("reddit_client_id", ""))
             self.reddit_client_secret.insert(
                 0, config["API"].get("reddit_client_secret", "")
             )
             self.reddit_user_agent.insert(0, config["API"].get("reddit_user_agent", ""))
             self.fmp_api.insert(0, config["API"].get("fmp_api", ""))
+        else:
+            message = "The selected file does not contain an [API] section."
+            self.log(message)
+            messagebox.showwarning("Invalid File", message)
 
     def load_tickers_from_file(self):
         """Load tickers from a text file."""
         file_path = filedialog.askopenfilename(
             filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
         )
-        if file_path:
-            try:
-                with open(file_path, "r") as f:
-                    tickers = f.read().strip()
-                self.ticker_text.delete("1.0", tk.END)
-                self.ticker_text.insert(tk.END, tickers)
-                self.log(f"Loaded tickers from file: {file_path}")
-            except Exception as e:
-                self.log(f"Error loading file: {e}")
+        # Stop if the user cancelled the dialog
+        if not file_path:
+            self.log("Ticker loading cancelled by user.")
+            return
+        try:
+            with open(file_path, "r") as f:
+                tickers = f.read().strip()
+            self.ticker_text.delete("1.0", tk.END)
+            self.ticker_text.insert(tk.END, tickers)
+            self.log(f"Loaded tickers from file: {file_path}")
+        except Exception as e:
+            self.log(f"Error loading file: {e}")
+            error_message = f"Failed to read the ticker file.\n\nError: {e}"
+            self.log(error_message)
+            messagebox.showerror("File Error", error_message)
 
     def build_strategy_inputs(self):
         """Builds the input fields for trading strategy configuration."""
@@ -273,7 +315,7 @@ class SentimentTradingSystem(object):
         ttk.Label(
             kwargs_label_frame,
             text="Tickers (MT5_ticker:Ticker)",
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI", 9, "bold"),
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 0))
 
         # Row 1 - Ticker input (Text widget)
@@ -294,6 +336,7 @@ class SentimentTradingSystem(object):
 
         self.threshold = ttk.Entry(kwargs_label_frame, width=30)
         self.threshold.grid(row=3, column=1, padx=5, pady=3, sticky="w")
+        self.threshold.insert(0, "0.2")
 
         # Row 4 - Maximum Positions
         ttk.Label(
@@ -302,6 +345,7 @@ class SentimentTradingSystem(object):
 
         self.max_positions = ttk.Entry(kwargs_label_frame, width=30)
         self.max_positions.grid(row=4, column=1, padx=5, pady=3, sticky="w")
+        self.max_positions.insert(0, "100")
 
     def build_engine_inputs(self):
         """Builds the input fields for trading engine configuration."""
@@ -315,10 +359,12 @@ class SentimentTradingSystem(object):
         params_frame.pack(fill="x", padx=5, pady=10)
 
         # Time Frame
+        DEFAULT_TIMEFRAME = "15m"
         ttk.Label(params_frame, text="Time Frame", font=("Segoe UI", 9)).grid(
             row=0, column=0, sticky="e", padx=5, pady=3
         )
         self.time_frame = StringVar()
+        self.time_frame.set(DEFAULT_TIMEFRAME)
         self.time_frame_dropdown = ttk.Combobox(
             params_frame,
             textvariable=self.time_frame,
@@ -334,6 +380,7 @@ class SentimentTradingSystem(object):
         )
         self.iter_time = ttk.Entry(params_frame, width=25)
         self.iter_time.grid(row=1, column=1, padx=5, pady=3)
+        self.iter_time.insert(0, "5")
 
         # Daily Risk
         ttk.Label(params_frame, text="Daily Risk (%)", font=("Segoe UI", 9)).grid(
@@ -341,6 +388,7 @@ class SentimentTradingSystem(object):
         )
         self.daily_risk = ttk.Entry(params_frame, width=25)
         self.daily_risk.grid(row=2, column=1, padx=5, pady=3)
+        self.daily_risk.insert(0, "1.0")
 
         # Max Risk
         ttk.Label(params_frame, text="Max Risk (%)", font=("Segoe UI", 9)).grid(
@@ -348,6 +396,7 @@ class SentimentTradingSystem(object):
         )
         self.max_risk = ttk.Entry(params_frame, width=25)
         self.max_risk.grid(row=3, column=1, padx=5, pady=3)
+        self.max_risk.insert(0, "10.0")
 
         # Toggle Options
         row_index = 4
@@ -505,7 +554,7 @@ class SentimentTradingSystem(object):
                 self.max_risk.get().strip(), float, "Max Risk (percentage)"
             )
             if self.max_risk.get().strip()
-            else 95.0
+            else 10.0
         )
         threshold = (
             inputs.validate_input(
@@ -519,12 +568,12 @@ class SentimentTradingSystem(object):
                 self.max_positions.get().strip(), int, "Max Positions"
             )
             if self.max_positions.get().strip()
-            else 10
+            else 100
         )  # Default value for
         iter_time = (
             inputs.validate_input(self.iter_time.get().strip(), int, "Iteration Time")
             if self.iter_time.get().strip()
-            else 5
+            else 15
         )  # Default value for iteration time
         mm_enabled = self.mm_enabled.get() == "True"
         auto_trade_enabled = self.auto_trade_enabled.get() == "True"
@@ -573,30 +622,29 @@ class SentimentTradingSystem(object):
                 self.mt5_server.get().strip(),
             ]
         ):
-            self.log("Please fill in all fields.")
+            err_msg = "MT5 Credentials missing, Please fill in all fields, (e.g., login, password, server, path)"
+            self.log(err_msg)
+            messagebox.showerror("Invalid Credentilas", err_msg)
             return
 
         if (
             not self.time_frame.get().strip()
             or self.time_frame.get().strip() not in TIMEFRAMES
         ):
-            self.log("Please select a valid time frame.")
-            return
-
-        if (
-            not self.reddit_client_id.get().strip()
-            or not self.reddit_client_secret.get().strip()
-            or not self.reddit_user_agent.get().strip()
-            or not self.fmp_api.get().strip()
-        ):
-            self.log("Please fill in all API fields.")
+            err_msg = (
+                f"Please select a valid time frame, e.g., ({TIMEFRAMES.values()}) "
+            )
+            self.log(err_msg)
+            messagebox.showerror("Invalid Time frame", err_msg)
             return
 
         if self.trading_periods.get().strip() not in ["month", "week", "day", "24/7"]:
-            self.log("Please select a valid trading period.")
+            err_msg = (
+                "Please select a valid trading period, e.g., (month, week, day, 24/7)"
+            )
+            self.log(err_msg)
+            messagebox.showerror("Invalid period", err_msg)
             return
-
-        # self._input_frame.grid_forget()
 
         self.log("Initializing trading engine...")
 
@@ -628,7 +676,7 @@ class SentimentTradingSystem(object):
         }
         symbols_list = list(tickers.keys())
         trade_instances = inputs.get_trade_instances(symbols_list, trade_args)
-        del trade_args["logger"]  # Remove logger to avoid circular reference
+        del trade_args["logger"]
 
         strategy_args = {
             "symbols": tickers,
