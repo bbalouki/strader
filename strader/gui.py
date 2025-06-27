@@ -374,32 +374,58 @@ class SentimentTradingApp(object):
         )
         self.time_frame_dropdown.grid(row=0, column=1, padx=5, pady=3)
 
+        # Starting time (HH:MM)
+        ttk.Label(
+            params_frame, text="Starting Time (HH:MM)", font=("Segoe UI", 9)
+        ).grid(row=1, column=0, sticky="e", padx=5, pady=3)
+        self.start_time = ttk.Entry(params_frame, width=25)
+        self.start_time.grid(row=1, column=1, padx=5, pady=3)
+        self.start_time.insert(0, "00:00")
+
+        # Finishing time (HH:MM)
+        # Stopping new entries
+        ttk.Label(
+            params_frame, text="Finishing Time (HH:MM)", font=("Segoe UI", 9)
+        ).grid(row=2, column=0, sticky="e", padx=5, pady=3)
+        self.finish_time = ttk.Entry(params_frame, width=25)
+        self.finish_time.grid(row=2, column=1, padx=5, pady=3)
+        self.finish_time.insert(0, "23:59")
+
+        # Ending time (HH:MM)
+        # closing all positions
+        ttk.Label(params_frame, text="Ending Time (HH:MM)", font=("Segoe UI", 9)).grid(
+            row=3, column=0, sticky="e", padx=5, pady=3
+        )
+        self.end_time = ttk.Entry(params_frame, width=25)
+        self.end_time.grid(row=3, column=1, padx=5, pady=3)
+        self.end_time.insert(0, "23:59")
+
         # Iteration Time
         ttk.Label(params_frame, text="Iteration Time (min)", font=("Segoe UI", 9)).grid(
-            row=1, column=0, sticky="e", padx=5, pady=3
+            row=4, column=0, sticky="e", padx=5, pady=3
         )
         self.iter_time = ttk.Entry(params_frame, width=25)
-        self.iter_time.grid(row=1, column=1, padx=5, pady=3)
+        self.iter_time.grid(row=4, column=1, padx=5, pady=3)
         self.iter_time.insert(0, "5")
 
         # Daily Risk
         ttk.Label(params_frame, text="Daily Risk (%)", font=("Segoe UI", 9)).grid(
-            row=2, column=0, sticky="e", padx=5, pady=3
+            row=5, column=0, sticky="e", padx=5, pady=3
         )
         self.daily_risk = ttk.Entry(params_frame, width=25)
-        self.daily_risk.grid(row=2, column=1, padx=5, pady=3)
+        self.daily_risk.grid(row=5, column=1, padx=5, pady=3)
         self.daily_risk.insert(0, "1.0")
 
         # Max Risk
         ttk.Label(params_frame, text="Max Risk (%)", font=("Segoe UI", 9)).grid(
-            row=3, column=0, sticky="e", padx=5, pady=3
+            row=6, column=0, sticky="e", padx=5, pady=3
         )
         self.max_risk = ttk.Entry(params_frame, width=25)
-        self.max_risk.grid(row=3, column=1, padx=5, pady=3)
+        self.max_risk.grid(row=6, column=1, padx=5, pady=3)
         self.max_risk.insert(0, "10.0")
 
         # Toggle Options
-        row_index = 4
+        row_index = 7
         toggle_options = [
             ("Enable MM", "mm_enabled"),
             ("Enable Auto Trade", "auto_trade_enabled"),
@@ -668,10 +694,13 @@ class SentimentTradingApp(object):
 
         trade_args = {
             **mt5_con_args,
+            "expert_id": SentimentTrading.ID,
+            "time_frame": self.time_frame.get().strip(),
+            "start_time": self.start_time.get().strip(),
+            "finishing_time": self.finish_time.get().strip(),
+            "ending_time": self.end_time.get().strip(),
             "max_risk": max_risk,
             "daily_risk": daily_risk,
-            "time_frame": self.time_frame.get().strip(),
-            "expert_id": SentimentTrading.ID,
             "logger": logger,
         }
         symbols_list = list(tickers.keys())
