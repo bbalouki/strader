@@ -5,3 +5,4 @@ __pycache__
 *.txt
 /build
 *.spec
+/dist
