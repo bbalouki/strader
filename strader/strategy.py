@@ -1,4 +1,5 @@
 from queue import Queue
+from tkinter import messagebox
 from typing import List
 
 from bbstrader.btengine.data import DataHandler
@@ -7,7 +8,6 @@ from bbstrader.btengine.strategy import MT5Strategy
 from bbstrader.metatrader.account import Account
 from bbstrader.metatrader.trade import TradeAction, TradeSignal, TradingMode
 from bbstrader.models.nlp import FINANCIAL_LEXICON, SentimentAnalyzer  # noqa: F401
-from tkinter import messagebox
 
 
 class SentimentTrading(MT5Strategy):
@@ -59,8 +59,9 @@ class SentimentTrading(MT5Strategy):
         )
 
         self.ID = kwargs.get("ID", SentimentTrading.ID)
-        self.threshold = kwargs.get("threshold", 0.2)
         self.tickers = kwargs.get("symbols")
+        self.threshold = kwargs.get("threshold", 0.2)
+        self.ext_th = kwargs.get("expected_return", 1.0)
         self.max_positions = kwargs.get("max_positions", len(self.tickers))
         self.analyser = SentimentAnalyzer()
         self._sentiments = {}
@@ -137,9 +138,30 @@ class SentimentTrading(MT5Strategy):
             symbol = self._get_mt5_equivalent(ticker)
 
             # Skip if already holding LONG or SHORT for this symbol
+            # Or EXIT condition are met
             if self.ispositions(
                 symbol, self.ID, 1, 1, one_true=True
             ) or self.ispositions(symbol, self.ID, 0, 1, one_true=True):
+                buys = self.get_positions_prices(symbol, self.ID, 0)
+                sells = self.get_positions_prices(symbol, self.ID, 1)
+                if (
+                    self.exit_positions(0, buys, symbol, th=self.ext_th)
+                    or score <= -self.threshold / 2
+                ):
+                    signals.append(
+                        TradeSignal(
+                            id=self.ID, symbol=symbol, action=TradeAction.EXIT_LONG
+                        )
+                    )
+                if (
+                    self.exit_positions(1, sells, symbol, th=self.ext_th)
+                    or score >= self.threshold
+                ):
+                    signals.append(
+                        TradeSignal(
+                            id=self.ID, symbol=symbol, action=TradeAction.EXIT_SHORT
+                        )
+                    )
                 continue
 
             # Generate LONG signal
@@ -163,15 +185,6 @@ class SentimentTrading(MT5Strategy):
         return signals
 
     def calculate_signals(self, event=None):
-        """
-        Main method for calculating signals. Handles both live and backtest modes.
-
-        Args:
-            event (Event): Market event, required for backtest signal evaluation.
-
-        Returns:
-            Optional[List[TradeSignal]]: Returns live signals if in live mode.
-        """
         if self.mode == TradingMode.BACKTEST and event is not None:
             if event.type == Events.MARKET:
                 self._calculate_backtest_signals()
