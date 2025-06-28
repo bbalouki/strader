@@ -2,6 +2,7 @@ import threading
 import tkinter as tk
 from tkinter import StringVar, filedialog, messagebox, scrolledtext, ttk
 
+import matplotlib
 import matplotlib.pyplot as plt
 from bbstrader.metatrader.utils import TIMEFRAMES
 from bbstrader.trading.execution import Mt5ExecutionEngine
@@ -10,6 +11,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from strader import inputs
 from strader.strategy import SentimentTrading
+
+matplotlib.use("TkAgg")
 
 
 class SentimentTradingApp(object):
