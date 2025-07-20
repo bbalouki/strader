@@ -2,12 +2,10 @@ from queue import Queue
 from tkinter import messagebox
 from typing import List
 
-from bbstrader.btengine.data import DataHandler
-from bbstrader.btengine.event import Events
-from bbstrader.btengine.strategy import MT5Strategy
-from bbstrader.metatrader.account import Account
-from bbstrader.metatrader.trade import TradeAction, TradeSignal, TradingMode
-from bbstrader.models.nlp import FINANCIAL_LEXICON, SentimentAnalyzer  # noqa: F401
+from bbstrader.btengine import DataHandler, Events, MT5Strategy
+from bbstrader.metatrader import TradeAction, TradeSignal, TradingMode
+from bbstrader.metatrader.trade import EXPERT_ID
+from bbstrader.models import LEXICON, SentimentAnalyzer  # noqa: F401
 
 
 class SentimentTrading(MT5Strategy):
@@ -19,8 +17,8 @@ class SentimentTrading(MT5Strategy):
         MT5Strategy: Base class for MetaTrader 5-compatible strategies.
     """
 
-    ID = 7950
     NAME = "BBS@STS"
+    ID = int(str(7950) + str(EXPERT_ID)[4:])
     DESCRIPTION = "Sentiment Trading Strategy"
 
     def __init__(
@@ -43,7 +41,10 @@ class SentimentTrading(MT5Strategy):
                 - ID (int): Strategy ID override.
                 - threshold (float): Sentiment score threshold for signals.
                 - max_positions (int): Maximum open positions allowed.
-                - symbols (dict): Mapping of MT5 symbols to external tickers.
+                - expected_return (float): Expected return threshold for exit signals for each symbol.
+                - symbols (dict): Mapping of MT5 symbols to external (Yahoo Finance) tickers.
+                - symbols_type (str): Can be "stock", "etf", "future", "forex", "crypto", "index".
+
         """
         self.bars = bars
         self.events = events
@@ -60,11 +61,15 @@ class SentimentTrading(MT5Strategy):
 
         self.ID = kwargs.get("ID", SentimentTrading.ID)
         self.tickers = kwargs.get("symbols")
+        self.symbol_type = kwargs.get("symbols_type")
         self.threshold = kwargs.get("threshold", 0.2)
-        self.ext_th = kwargs.get("expected_return", 1.0)
+        self.ext_th = kwargs.get("expected_return", 5.0)
         self.max_positions = kwargs.get("max_positions", len(self.tickers))
+        _max_trades = kwargs.get("max_trades", self.max_positions // len(self.tickers))
+        self.max_trades = {s: _max_trades for s in self.tickers.keys()}
         self.analyser = SentimentAnalyzer()
         self._sentiments = {}
+        del _max_trades
 
     @property
     def sentiments(self):
@@ -90,9 +95,7 @@ class SentimentTrading(MT5Strategy):
         Returns:
             bool: True if max_positions limit is reached, False otherwise.
         """
-        account = Account(**self.kwargs)
-        positions = account.get_positions() or []
-        positions = [p for p in positions if p.magic == self.ID]
+        positions = [p for p in self.positions if p.magic == self.ID]
         return len(positions) >= self.max_positions
 
     def _get_mt5_equivalent(self, ticker) -> str:
@@ -114,73 +117,101 @@ class SentimentTrading(MT5Strategy):
         Returns:
             List[TradeSignal]: List of trade signals based on sentiment thresholds.
         """
+        signals: List[TradeSignal] = []
         tickers = list(self.tickers.values())
         if len(tickers) == 0:
-            return []
+            return signals
 
         to_show = ", ".join(tickers[:5])
         self.logger.info(f"Fetching sentiments for tickers: {to_show}...")
 
         try:
             sentiments = self.analyser.get_sentiment_for_tickers(
-                tickers, lexicon=FINANCIAL_LEXICON, **self.kwargs
+                tickers,
+                lexicon=LEXICON[self.symbol_type],
+                asset_type=self.symbol_type,
+                **self.kwargs,
             )
         except Exception as e:
             err_msg = f"Error fetching sentiments: {e}"
             self.logger.error(err_msg)
             messagebox.showerror("Error", err_msg)
-            return {}
-
+            return signals
         self._sentiments = sentiments
-        signals: List[TradeSignal] = []
+        to_show = {s: round(sentiments[s], 3) for s in tickers[:4]}
+        self.logger.debug(f"Sentiment Fectched for {to_show}...")
 
         for ticker, score in sentiments.items():
             symbol = self._get_mt5_equivalent(ticker)
 
-            # Skip if already holding LONG or SHORT for this symbol
-            # Or EXIT condition are met
-            if self.ispositions(
-                symbol, self.ID, 1, 1, one_true=True
-            ) or self.ispositions(symbol, self.ID, 0, 1, one_true=True):
-                buys = self.get_positions_prices(symbol, self.ID, 0)
-                sells = self.get_positions_prices(symbol, self.ID, 1)
-                if (
-                    self.exit_positions(0, buys, symbol, th=self.ext_th)
-                    or score <= -self.threshold / 2
-                ):
-                    signals.append(
-                        TradeSignal(
-                            id=self.ID, symbol=symbol, action=TradeAction.EXIT_LONG
-                        )
-                    )
-                if (
-                    self.exit_positions(1, sells, symbol, th=self.ext_th)
-                    or score >= self.threshold
-                ):
-                    signals.append(
-                        TradeSignal(
-                            id=self.ID, symbol=symbol, action=TradeAction.EXIT_SHORT
-                        )
-                    )
-                continue
+            # Check if EXIT conditions are met
+            exit_signal = None
+            buys = self.get_positions_prices(symbol, self.ID, 0)
+            sells = self.get_positions_prices(symbol, self.ID, 1)
+            if (
+                self.exit_positions(0, buys, symbol, th=self.ext_th)
+                or score <= -self.threshold / 2
+            ):
+                exit_signal = TradeSignal(
+                    id=self.ID, symbol=symbol, action=TradeAction.EXIT_LONG
+                )
+            elif (
+                self.exit_positions(1, sells, symbol, th=self.ext_th)
+                or score >= self.threshold
+            ):
+                exit_signal = TradeSignal(
+                    id=self.ID, symbol=symbol, action=TradeAction.EXIT_SHORT
+                )
+
+            if exit_signal is not None:
+                signals.append(exit_signal)
 
             # Generate LONG signal
             if score >= self.threshold and not self._ismax_postions():
-                self.logger.debug(
-                    f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
-                )
-                signal = TradeSignal(id=self.ID, symbol=symbol, action=TradeAction.LONG)
-                signals.append(signal)
+                if len(buys) == 0:
+                    self.logger.debug(
+                        f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
+                    )
+                    signal = TradeSignal(
+                        id=self.ID, symbol=symbol, action=TradeAction.LONG
+                    )
+                    signals.append(signal)
+                elif len(buys) in range(1, self.max_trades[symbol] + 1):
+                    current_price = self.account.get_tick_info(symbol).ask
+                    if (
+                        self.calculate_pct_change(current_price, min(buys))
+                        <= -self.ext_th / 2
+                    ):
+                        self.logger.debug(
+                            f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
+                        )
+                        signal = TradeSignal(
+                            id=self.ID, symbol=symbol, action=TradeAction.LONG
+                        )
+                        signals.append(signal)
 
             # Generate SHORT signal
             if score <= -self.threshold / 2 and not self._ismax_postions():
-                self.logger.debug(
-                    f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
-                )
-                signal = TradeSignal(
-                    id=self.ID, symbol=symbol, action=TradeAction.SHORT
-                )
-                signals.append(signal)
+                if len(sells) == 0:
+                    self.logger.debug(
+                        f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
+                    )
+                    signal = TradeSignal(
+                        id=self.ID, symbol=symbol, action=TradeAction.SHORT
+                    )
+                    signals.append(signal)
+                elif len(sells) in range(1, self.max_trades + 1):
+                    if (
+                        self.calculate_pct_change(current_price, max(sells))
+                        >= self.ext_th / 2
+                    ):
+                        self.logger.debug(
+                            f"Ticker: {ticker}, Symbol: {symbol}, Sentiment: {score}"
+                        )
+                        signal = TradeSignal(
+                            id=self.ID, symbol=symbol, action=TradeAction.SHORT
+                        )
+                        signals.append(signal)
 
         return signals
 

@@ -72,14 +72,14 @@ def get_mt5_path(path: str):
     return path
 
 
-def get_trade_instances(mt5_tickers: List[str], trade_args: Dict) -> Dict[str, Trade]:
+def get_trade_instances(mt5_tickers: List[str], trade_kwargs: Dict) -> Dict[str, Trade]:
     """
     Creates trade instances for each ticker using the provided arguments.
 
     :param mt5_tickers: A list of MT5 ticker strings.
-    :param trade_args: A dictionary of arguments to pass to the Trade constructor.
+    :param trade_kwargs: A dictionary of arguments to pass to the Trade constructor.
     :return: A dictionary mapping each ticker to its corresponding Trade instance.
     """
     if not mt5_tickers:
         messagebox.showerror("Input Error", "MT5 tickers list cannot be empty.")
-    return create_trade_instance(mt5_tickers, trade_args)
+    return create_trade_instance(mt5_tickers, trade_kwargs)

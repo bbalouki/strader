@@ -4,8 +4,7 @@ from tkinter import StringVar, filedialog, messagebox, scrolledtext, ttk
 
 import matplotlib
 import matplotlib.pyplot as plt
-from bbstrader.metatrader.utils import TIMEFRAMES
-from bbstrader.trading.execution import Mt5ExecutionEngine
+from bbstrader.trading.execution import MT5_ENGINE_TIMEFRAMES, Mt5ExecutionEngine
 from loguru import logger
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -13,6 +12,8 @@ from strader import inputs
 from strader.strategy import SentimentTrading
 
 matplotlib.use("TkAgg")
+
+SYMBOLS_TYPE = ["stock", "etf", "future", "forex", "crypto", "index"]
 
 
 class SentimentTradingApp(object):
@@ -332,23 +333,48 @@ class SentimentTradingApp(object):
             command=self.load_tickers_from_file,
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 10))
 
-        # Row 3 - Sentiment Threshold
+        # Row 3 Symbol type
+        DEFAULT_SYMBOS_TYPE = "stock"
+        ttk.Label(kwargs_label_frame, text="Symbol type", font=("Segoe UI", 9)).grid(
+            row=3, column=0, sticky="e", padx=5, pady=3
+        )
+        self.symbls_type = StringVar()
+        self.symbls_type.set(DEFAULT_SYMBOS_TYPE)
+        self.symbls_type_dropdown = ttk.Combobox(
+            kwargs_label_frame,
+            textvariable=self.symbls_type,
+            values=SYMBOLS_TYPE,
+            state="readonly",
+            width=25,
+        )
+        self.symbls_type_dropdown.grid(row=3, column=1, padx=5, pady=3, sticky="w")
+
+        # Row 4 - Sentiment Threshold
         ttk.Label(
             kwargs_label_frame, text="Sentiment Threshold", font=("Segoe UI", 9)
-        ).grid(row=3, column=0, sticky="e", padx=5, pady=3)
-
-        self.threshold = ttk.Entry(kwargs_label_frame, width=30)
-        self.threshold.grid(row=3, column=1, padx=5, pady=3, sticky="w")
-        self.threshold.insert(0, "0.2")
-
-        # Row 4 - Maximum Positions
-        ttk.Label(
-            kwargs_label_frame, text="Maximum Positions", font=("Segoe UI", 9)
         ).grid(row=4, column=0, sticky="e", padx=5, pady=3)
 
+        self.threshold = ttk.Entry(kwargs_label_frame, width=30)
+        self.threshold.grid(row=4, column=1, padx=5, pady=3, sticky="w")
+        self.threshold.insert(0, "0.2")
+
+        # Row 5 - Maximum Positions
+        ttk.Label(
+            kwargs_label_frame, text="Maximum Positions", font=("Segoe UI", 9)
+        ).grid(row=5, column=0, sticky="e", padx=5, pady=3)
+
         self.max_positions = ttk.Entry(kwargs_label_frame, width=30)
-        self.max_positions.grid(row=4, column=1, padx=5, pady=3, sticky="w")
+        self.max_positions.grid(row=5, column=1, padx=5, pady=3, sticky="w")
         self.max_positions.insert(0, "100")
+
+        # Row 6 - Expected Return Threshold
+        ttk.Label(
+            kwargs_label_frame, text="Expected Return (%)", font=("Segoe UI", 9)
+        ).grid(row=6, column=0, sticky="e", padx=5, pady=3)
+
+        self.expected_return = ttk.Entry(kwargs_label_frame, width=30)
+        self.expected_return.grid(row=6, column=1, padx=5, pady=3, sticky="w")
+        self.expected_return.insert(0, "5.0")
 
     def build_engine_inputs(self):
         """Builds the input fields for trading engine configuration."""
@@ -371,11 +397,11 @@ class SentimentTradingApp(object):
         self.time_frame_dropdown = ttk.Combobox(
             params_frame,
             textvariable=self.time_frame,
-            values=list(TIMEFRAMES.keys()),
+            values=MT5_ENGINE_TIMEFRAMES,
             state="readonly",
             width=25,
         )
-        self.time_frame_dropdown.grid(row=0, column=1, padx=5, pady=3)
+        self.time_frame_dropdown.grid(row=0, column=1, padx=5, pady=3, sticky="w")
 
         # Starting time (HH:MM)
         ttk.Label(
@@ -409,15 +435,15 @@ class SentimentTradingApp(object):
         )
         self.iter_time = ttk.Entry(params_frame, width=25)
         self.iter_time.grid(row=4, column=1, padx=5, pady=3)
-        self.iter_time.insert(0, "5")
+        self.iter_time.insert(0, "15")
 
         # Daily Risk
-        ttk.Label(params_frame, text="Daily Risk (%)", font=("Segoe UI", 9)).grid(
+        ttk.Label(params_frame, text="Risk/trade (%)", font=("Segoe UI", 9)).grid(
             row=5, column=0, sticky="e", padx=5, pady=3
         )
         self.daily_risk = ttk.Entry(params_frame, width=25)
         self.daily_risk.grid(row=5, column=1, padx=5, pady=3)
-        self.daily_risk.insert(0, "1.0")
+        self.daily_risk.insert(0, "0.01")
 
         # Max Risk
         ttk.Label(params_frame, text="Max Risk (%)", font=("Segoe UI", 9)).grid(
@@ -576,7 +602,7 @@ class SentimentTradingApp(object):
                 self.daily_risk.get().strip(), float, "Daily Risk (percentage)"
             )
             if self.daily_risk.get().strip()
-            else 1.0
+            else 0.01
         )
         max_risk = (
             inputs.validate_input(
@@ -599,6 +625,15 @@ class SentimentTradingApp(object):
             if self.max_positions.get().strip()
             else 100
         )  # Default value for
+
+        # Expected return
+        expected_return = (
+            inputs.validate_input(
+                self.expected_return.get().strip(), float, "Expected Return"
+            )
+            if self.expected_return.get().strip()
+            else 5.0
+        )
         iter_time = (
             inputs.validate_input(self.iter_time.get().strip(), int, "Iteration Time")
             if self.iter_time.get().strip()
@@ -617,6 +652,7 @@ class SentimentTradingApp(object):
             max_risk,
             threshold,
             max_positions,
+            expected_return,
             iter_time,
             mm_enabled,
             auto_trade_enabled,
@@ -635,6 +671,7 @@ class SentimentTradingApp(object):
             max_risk,
             threshold,
             max_positions,
+            expected_return,
             iter_time,
             mm_enabled,
             auto_trade_enabled,
@@ -658,10 +695,10 @@ class SentimentTradingApp(object):
 
         if (
             not self.time_frame.get().strip()
-            or self.time_frame.get().strip() not in TIMEFRAMES
+            or self.time_frame.get().strip() not in MT5_ENGINE_TIMEFRAMES
         ):
             err_msg = (
-                f"Please select a valid time frame, e.g., ({TIMEFRAMES.values()}) "
+                f"Please select a valid time frame, e.g., ({MT5_ENGINE_TIMEFRAMES}) "
             )
             self.log(err_msg)
             messagebox.showerror("Invalid Time frame", err_msg)
@@ -673,6 +710,13 @@ class SentimentTradingApp(object):
             )
             self.log(err_msg)
             messagebox.showerror("Invalid period", err_msg)
+            return
+        if self.symbls_type.get().strip() not in SYMBOLS_TYPE:
+            err_msg = (
+                f"Please select a valid symbols_type, e.g., ({','.join(SYMBOLS_TYPE)})"
+            )
+            self.log(err_msg)
+            messagebox.showerror("Invalid Symbol type", err_msg)
             return
 
         self.log("Initializing trading engine...")
@@ -687,59 +731,64 @@ class SentimentTradingApp(object):
             format="{time:YYYY-MM-DD HH:mm:ss} {level} {message}",
         )
 
-        mt5_con_args = {
+        mt5_con_kwargs = {
             "path": mt5_path,
             "login": mt5_login,
             "password": self.mt5_password.get().strip(),
             "server": self.mt5_server.get().strip(),
             "copy": True,
         }
-
-        trade_args = {
-            **mt5_con_args,
+        symbols_list = list(tickers.keys())
+        max_trades = int(max_positions / len(symbols_list))
+        trade_kwargs = {
+            **mt5_con_kwargs,
             "expert_id": SentimentTrading.ID,
             "time_frame": self.time_frame.get().strip(),
             "start_time": self.start_time.get().strip(),
             "finishing_time": self.finish_time.get().strip(),
             "ending_time": self.end_time.get().strip(),
+            "max_trades": max_trades,
             "max_risk": max_risk,
             "daily_risk": daily_risk,
             "logger": logger,
         }
-        symbols_list = list(tickers.keys())
-        trade_instances = inputs.get_trade_instances(symbols_list, trade_args)
-        del trade_args["logger"]
+        trade_instances = inputs.get_trade_instances(symbols_list, trade_kwargs)
+        del trade_kwargs["logger"]
+        del trade_kwargs["max_trades"]
 
-        strategy_args = {
+        strategy_kwargs = {
             "symbols": tickers,
+            "symbols_type": self.symbls_type.get().strip(),
             "threshold": threshold,
             "max_positions": max_positions,
+            "expected_return": expected_return,
             "client_id": self.reddit_client_id.get().strip(),
             "client_secret": self.reddit_client_secret.get().strip(),
             "user_agent": self.reddit_user_agent.get().strip(),
             "fmp_api": self.fmp_api.get().strip(),
+            "max_trades": max_trades,
             "logger": logger,
         }
 
-        engine_args = {
+        engine_kwargs = {
             "mm": mm_enabled,
             "auto_trade": auto_trade_enabled,
             "iter_time": iter_time,
             "period": self.trading_periods.get().strip(),
-            "comment": f"bbs@{SentimentTrading.NAME}",
+            "comment": f"{SentimentTrading.NAME}",
             "account": f"{mt5_login}@{self.mt5_server.get().strip()}",
             "strategy_name": SentimentTrading.NAME,
             "debug_mode": debug_mode_enabled,
             "notify": notification_enabled,
             "optimizer": None,
-            **trade_args,
-            **strategy_args,
+            **trade_kwargs,
+            **strategy_kwargs,
         }
 
         self.initialize_engine(
             symbols_list,
             trade_instances,
-            **engine_args,
+            **engine_kwargs,
         )
         # Start live chart update loop
         self.start_chart_update_loop()
