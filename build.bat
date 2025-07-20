@@ -26,6 +26,7 @@ echo.
 
 :: Clean up old build files before starting a new one
 IF EXIST build rmdir /s /q build
+IF EXIST dist rmdir /s /q dist
 IF EXIST strader.spec del strader.spec
 
 :: Run the PyInstaller command
