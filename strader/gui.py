@@ -776,7 +776,7 @@ class SentimentTradingApp(object):
             "iter_time": iter_time,
             "period": self.trading_periods.get().strip(),
             "comment": f"{SentimentTrading.NAME}",
-            "account": f"{mt5_login}@{self.mt5_server.get().strip()}",
+            "account": f"{mt5_login}@{self.mt5_server.get().strip().split('-')[0]}",
             "strategy_name": SentimentTrading.NAME,
             "debug_mode": debug_mode_enabled,
             "notify": notification_enabled,
