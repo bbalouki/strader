@@ -585,6 +585,8 @@ class SentimentTradingApp(object):
             symbols_list,
             trades,
             SentimentTrading,
+            period_end_action="sleep",
+            closing_pnl=10.0,
             prompt_callback=self.gui_safe_prompt,
             **kwargs,
         )
