@@ -36,4 +36,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except Exception as e:
+        error_details = f"{e}\n\n{traceback.format_exc()}"
+        messagebox.showerror("Fatal Error", error_details)
+        sys.exit(1)
